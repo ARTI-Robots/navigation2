@@ -36,6 +36,8 @@ public:
     const std::string & lifecycle_node_name,
     rclcpp::Node::SharedPtr parent_node);
 
+  bool isAvailable(const std::chrono::seconds timeout);
+
   /// Trigger a state change
   /**
    * Throws std::runtime_error on failure
