@@ -90,6 +90,7 @@ AmclNode::AmclNode()
   add_parameter("beam_skip_error_threshold", rclcpp::ParameterValue(0.9));
   add_parameter("beam_skip_threshold", rclcpp::ParameterValue(0.3));
   add_parameter("do_beamskip", rclcpp::ParameterValue(false));
+  add_parameter("first_map_only", rclcpp::ParameterValue(true));
 
   add_parameter(
     "global_frame_id", rclcpp::ParameterValue(std::string("map")),
@@ -1099,7 +1100,7 @@ AmclNode::initParameters()
   get_parameter("z_max", z_max_);
   get_parameter("z_rand", z_rand_);
   get_parameter("z_short", z_short_);
-  get_parameter("first_map_only_", first_map_only_);
+  get_parameter("first_map_only", first_map_only_);
   get_parameter("always_reset_initial_pose", always_reset_initial_pose_);
   get_parameter("scan_topic", scan_topic_);
   get_parameter("map_topic", map_topic_);
