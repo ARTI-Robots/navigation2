@@ -3,7 +3,7 @@ geometry_msgs/PoseStamped pose
 string behavior_tree
 ---
 #result definition
-std_msgs/Empty result
+nav2_msgs/NavigationResult result
 ---
 geometry_msgs/PoseStamped current_pose
 builtin_interfaces/Duration navigation_time
