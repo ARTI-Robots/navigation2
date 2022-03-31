@@ -205,7 +205,34 @@ protected:
     const std::shared_ptr<std_srvs::srv::Empty::Request> request,
     std::shared_ptr<std_srvs::srv::Empty::Response> response);
 
-  // Nomotion update control. Used to temporarily let amcl update samples even when no motion occurs
+
+  // Let amcl update particles with artificial noise without requiring motion
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr noise_only_update_srv_;
+  /*
+   * @brief Request an AMCL update even though the robot hasn't moved and use artificial noise
+   */
+  void noiseOnlyUpdateCallback(
+   const std::shared_ptr<rmw_request_id_t> request_header,
+   const std::shared_ptr<std_srvs::srv::Empty::Request> request,
+   std::shared_ptr<std_srvs::srv::Empty::Response> response);
+
+  // Try to recover from local error (e.g. wheel slip after emergency stop) by adding noise and forcing some updates
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr local_recovery_srv_;
+  /*
+   * @brief Request local recovery that adds noise and forces some filter updates
+   */
+  void localRecoveryCallback(
+   const std::shared_ptr<rmw_request_id_t> request_header,
+   const std::shared_ptr<std_srvs::srv::Empty::Request> request,
+   std::shared_ptr<std_srvs::srv::Empty::Response> response);
+
+  // How many recovery runs (noise_only_update + n x nomotion updates) should be performed for local recovery
+  std::atomic<int> recovery_run_count_{0};
+  // How many nomotion update should be performed per run in local recovery
+  std::atomic<int> recovery_scan_count_{0};
+  // Force an update with artificial noise to model increased uncertainty for next scan
+  std::atomic<bool> noise_only_update_{false};
+  // Force update of samples even when no motion occurs for next scan
   std::atomic<bool> force_update_{false};
 
   // Odometry
@@ -214,6 +241,7 @@ protected:
    */
   void initOdometry();
   std::unique_ptr<nav2_amcl::MotionModel> motion_model_;
+  std::unique_ptr<nav2_amcl::MotionModel> recovery_motion_model_;
   geometry_msgs::msg::PoseStamped latest_odom_pose_;
   geometry_msgs::msg::PoseWithCovarianceStamped last_published_pose_;
   double init_pose_[3];  // Initial robot pose
@@ -334,6 +362,9 @@ protected:
   double alpha3_;
   double alpha4_;
   double alpha5_;
+  double recovery_noise_scaler_;
+  int recovery_number_of_runs_;
+  int recovery_scan_updates_per_run_;
   std::string base_frame_id_;
   double beam_skip_distance_;
   double beam_skip_error_threshold_;

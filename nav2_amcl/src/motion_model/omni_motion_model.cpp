@@ -90,4 +90,12 @@ OmniMotionModel::odometryUpdate(pf_t * pf, const pf_vector_t & pose, const pf_ve
   }
 }
 
+void
+OmniMotionModel::noiseOnlyUpdate(pf_t * pf __attribute__((unused)), const pf_vector_t & pose __attribute__((unused)), const pf_vector_t & delta __attribute__((unused)))
+{
+  //TODO(gotzmann): this is just a workaround to get it to compile!
+  // noiseOnlyUpdate needs to be implemented similar to the one in DifferentialMotionModel
+  throw std::runtime_error("Noise only update not implemented for OmniMotionModel!");
+}
+
 }  // namespace nav2_amcl

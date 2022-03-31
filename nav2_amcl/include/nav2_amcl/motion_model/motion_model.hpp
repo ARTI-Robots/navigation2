@@ -41,6 +41,14 @@ public:
    */
   virtual void odometryUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta) = 0;
 
+   /**
+   * @brief Update on new odometry data
+   * @param pf The particle filter to update
+   * @param pose pose of robot in odometry update
+   * @param delta change in pose assumed for noise estimation (this value might be a static parameter)
+   */
+  virtual void noiseOnlyUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta) = 0;
+
   /**
    * @brief An factory to create motion models
    * @param type Type of motion model to create in factory
@@ -81,6 +89,14 @@ public:
    */
   void odometryUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
 
+  /**
+ * @brief Update on new odometry data
+ * @param pf The particle filter to update
+ * @param pose pose of robot in odometry update
+ * @param delta change in pose assumed for noise estimation (this value might be a static parameter)
+ */
+  void noiseOnlyUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
+
 private:
   double alpha1_;
   double alpha2_;
@@ -112,6 +128,14 @@ public:
    * @param delta change in pose in odometry update
    */
   void odometryUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
+
+  /**
+ * @brief Update on new odometry data
+ * @param pf The particle filter to update
+ * @param pose pose of robot in odometry update
+ * @param delta change in pose assumed for noise estimation (this value might be a static parameter)
+ */
+  void noiseOnlyUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
 
 private:
   double alpha1_;
