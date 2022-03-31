@@ -39,6 +39,7 @@ public:
     double alpha1, double alpha2, double alpha3, double alpha4,
     double alpha5);
   virtual void odometryUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
+  virtual void noiseOnlyUpdate(pf_t * pf, const pf_vector_t & pose, const pf_vector_t & delta);
 
 private:
   double alpha1_, alpha2_, alpha3_, alpha4_, alpha5_;

@@ -21,6 +21,8 @@
 
 #include "nav2_amcl/motion_model/omni_motion_model.hpp"
 
+#include <iostream>
+
 namespace nav2_amcl
 {
 
@@ -86,6 +88,14 @@ OmniMotionModel::odometryUpdate(
       delta_strafe_hat * cs_bearing);
     sample->pose.v[2] += delta_rot_hat;
   }
+}
+
+void
+OmniMotionModel::noiseOnlyUpdate(pf_t * pf __attribute__((unused)), const pf_vector_t & pose __attribute__((unused)), const pf_vector_t & delta __attribute__((unused)))
+{
+  //TODO(gotzmann): this is just a workaround to get it to compile!
+  // noiseOnlyUpdate needs to be implemented similar to the one in DifferentialMotionModel
+  throw std::runtime_error("Noise only update not implemented for OmniMotionModel!");
 }
 
 }  // namespace nav2_amcl
