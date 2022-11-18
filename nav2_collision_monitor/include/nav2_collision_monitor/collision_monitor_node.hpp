@@ -21,6 +21,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "std_msgs/msg/bool.hpp"
 
 #include "tf2/time.h"
 #include "tf2_ros/buffer.h"
@@ -35,6 +36,7 @@
 #include "nav2_collision_monitor/scan.hpp"
 #include "nav2_collision_monitor/pointcloud.hpp"
 #include "nav2_collision_monitor/range.hpp"
+#include "nav2_collision_monitor/srv/change_field_state.hpp"
 
 namespace nav2_collision_monitor
 {
@@ -95,6 +97,14 @@ protected:
    */
   void cmdVelInCallback(geometry_msgs::msg::Twist::ConstSharedPtr msg);
   /**
+   * @brief Callback for change field state service
+   * @param request change field state request
+   * @param response change field state response
+   */
+  void changeFieldStateCallback(std::shared_ptr<rmw_request_id_t> request_header,
+                                std::shared_ptr<nav2_collision_monitor::srv::ChangeFieldState::Request> request,
+                                std::shared_ptr<nav2_collision_monitor::srv::ChangeFieldState::Response> response);
+  /**
    * @brief Publishes output cmd_vel. If robot was stopped more than stop_pub_timeout_ seconds,
    * quit to publish 0-velocity.
    * @param robot_action Robot action to publish
@@ -110,7 +120,8 @@ protected:
    */
   bool getParameters(
     std::string & cmd_vel_in_topic,
-    std::string & cmd_vel_out_topic);
+    std::string & cmd_vel_out_topic,
+    std::string & emg_stop_topic);
   /**
    * @brief Supporting routine creating and configuring all polygons
    * @param base_frame_id Robot base frame ID
@@ -200,6 +211,11 @@ protected:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_in_sub_;
   /// @brief Output cmd_vel publisher
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_out_pub_;
+  /// @brief Output emergency stop publisher
+  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::Bool>::SharedPtr emg_stop_pub_;
+  /// @brief Service to enable and disable fields
+  rclcpp::Service<nav2_collision_monitor::srv::ChangeFieldState>::SharedPtr change_field_state_srv_;
+
 
   /// @brief Whether main routine is active
   bool process_active_;
