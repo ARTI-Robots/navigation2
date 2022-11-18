@@ -93,9 +93,59 @@ OmniMotionModel::odometryUpdate(
 void
 OmniMotionModel::noiseOnlyUpdate(pf_t * pf __attribute__((unused)), const pf_vector_t & pose __attribute__((unused)), const pf_vector_t & delta __attribute__((unused)))
 {
-  //TODO(gotzmann): this is just a workaround to get it to compile!
-  // noiseOnlyUpdate needs to be implemented similar to the one in DifferentialMotionModel
-  throw std::runtime_error("Noise only update not implemented for OmniMotionModel!");
+
+  std::cout << "NoiseOnlyUpdate called with delta " << delta.v[0] << " " << delta.v[1] << " " << delta.v[2]
+            << std::endl;
+  std::cout << "alpha1 " << alpha1_ << " alpha2 " << alpha2_ << " alpha3 " << alpha3_ << " alpha4 " << alpha4_
+            << " alpha5 " << alpha5_ << std::endl;
+  std::cout << "pose " << pose.v[0] << " " << pose.v[1] << " " << pose.v[2] << std::endl;
+
+  // Compute the new sample poses
+  pf_sample_set_t * set;
+
+  set = pf->sets + pf->current_set;
+  pf_vector_t old_pose = pf_vector_sub(pose, delta);
+
+  double delta_trans, delta_rot, delta_bearing;
+  double delta_trans_hat, delta_rot_hat, delta_strafe_hat;
+
+  delta_trans = sqrt(
+   delta.v[0] * delta.v[0] +
+   delta.v[1] * delta.v[1]);
+  delta_rot = delta.v[2];
+
+
+  // Precompute a couple of things
+  double trans_hat_stddev = sqrt(
+   alpha3_ * (delta_trans * delta_trans) +
+   alpha4_ * (delta_rot * delta_rot) );
+  double rot_hat_stddev = sqrt(
+   alpha1_ * (delta_rot * delta_rot) +
+   alpha2_ * (delta_trans * delta_trans) );
+  double strafe_hat_stddev = sqrt(
+   alpha4_ * (delta_rot * delta_rot) +
+   alpha5_ * (delta_trans * delta_trans) );
+
+  for (int i = 0; i < set->sample_count; i++) {
+    pf_sample_t * sample = set->samples + i;
+
+    delta_bearing = angleutils::angle_diff(
+     atan2(delta.v[1], delta.v[0]),
+     old_pose.v[2]) + sample->pose.v[2];
+    double cs_bearing = cos(delta_bearing);
+    double sn_bearing = sin(delta_bearing);
+
+    // Sample just noise from pose differences
+    delta_trans_hat = pf_ran_gaussian(trans_hat_stddev);
+    delta_rot_hat = pf_ran_gaussian(rot_hat_stddev);
+    delta_strafe_hat = pf_ran_gaussian(strafe_hat_stddev);
+    // Apply sampled update to particle pose
+    sample->pose.v[0] += (delta_trans_hat * cs_bearing +
+                          delta_strafe_hat * sn_bearing);
+    sample->pose.v[1] += (delta_trans_hat * sn_bearing -
+                          delta_strafe_hat * cs_bearing);
+    sample->pose.v[2] += delta_rot_hat;
+  }
 }
 
 }  // namespace nav2_amcl
