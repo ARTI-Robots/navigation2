@@ -68,11 +68,11 @@ public:
    */
   bool configure();
   /**
-   * @brief Activates polygon lifecycle publisher
+   * @brief Activates polygon check and lifecycle publisher
    */
   void activate();
   /**
-   * @brief Deactivates polygon lifecycle publisher
+   * @brief Deactivates polygon check and lifecycle publisher
    */
   void deactivate();
 
@@ -97,6 +97,16 @@ public:
    * @return Speed slowdown ratio
    */
   double getSlowdownRatio() const;
+  /**
+   * @brief Obtains if checks are enabled for this polygon.
+   * @return true if enabled
+   */
+  bool isEnabled() const;
+  /**
+   * @brief Obtains if checks should be enabled by default for this polygon.
+   * @return true if enabled
+   */
+  bool isDefaultEnabled() const;
   /**
    * @brief Obtains required time before collision for current polygon.
    * Applicable for APPROACH model.
@@ -183,6 +193,10 @@ protected:
   double time_before_collision_;
   /// @brief Time step for robot movement simulation
   double simulation_time_step_;
+  /// @brief Weather to enable this polygon check (current value)
+  bool enable_;
+  /// @brief Weather to enable this polygon check by default
+  bool default_enabled_;
   /// @brief Footprint subscriber
   std::unique_ptr<nav2_costmap_2d::FootprintSubscriber> footprint_sub_;
 

@@ -34,7 +34,7 @@ Polygon::Polygon(
   const std::string & base_frame_id,
   const tf2::Duration & transform_tolerance)
 : node_(node), polygon_name_(polygon_name), action_type_(DO_NOTHING),
-  slowdown_ratio_(0.0), footprint_sub_(nullptr), tf_buffer_(tf_buffer),
+  slowdown_ratio_(0.0), enable_(false), footprint_sub_(nullptr), tf_buffer_(tf_buffer),
   base_frame_id_(base_frame_id), transform_tolerance_(transform_tolerance)
 {
   RCLCPP_INFO(logger_, "[%s]: Creating Polygon", polygon_name_.c_str());
@@ -87,6 +87,7 @@ bool Polygon::configure()
 
 void Polygon::activate()
 {
+  enable_ = true;
   if (visualize_) {
     polygon_pub_->on_activate();
   }
@@ -94,6 +95,7 @@ void Polygon::activate()
 
 void Polygon::deactivate()
 {
+  enable_ = false;
   if (visualize_) {
     polygon_pub_->on_deactivate();
   }
@@ -118,6 +120,17 @@ double Polygon::getSlowdownRatio() const
 {
   return slowdown_ratio_;
 }
+
+bool Polygon::isEnabled() const
+{
+  return enable_;
+}
+
+bool Polygon::isDefaultEnabled() const
+{
+  return default_enabled_;
+}
+
 
 double Polygon::getTimeBeforeCollision() const
 {
@@ -228,7 +241,9 @@ bool Polygon::getCommonParameters(std::string & polygon_pub_topic)
       node, polygon_name_ + ".action_type", rclcpp::PARAMETER_STRING);
     const std::string at_str =
       node->get_parameter(polygon_name_ + ".action_type").as_string();
-    if (at_str == "stop") {
+    if (at_str == "emg_stop") {
+      action_type_ = EMG_STOP;
+    } else if (at_str == "stop") {
       action_type_ = STOP;
     } else if (at_str == "slowdown") {
       action_type_ = SLOWDOWN;
@@ -242,6 +257,10 @@ bool Polygon::getCommonParameters(std::string & polygon_pub_topic)
     nav2_util::declare_parameter_if_not_declared(
       node, polygon_name_ + ".max_points", rclcpp::ParameterValue(3));
     max_points_ = node->get_parameter(polygon_name_ + ".max_points").as_int();
+
+    nav2_util::declare_parameter_if_not_declared(
+        node, polygon_name_ + ".default_enabled", rclcpp::ParameterValue(false));
+    default_enabled_ = node->get_parameter(polygon_name_ + ".default_enabled").as_bool();
 
     if (action_type_ == SLOWDOWN) {
       nav2_util::declare_parameter_if_not_declared(

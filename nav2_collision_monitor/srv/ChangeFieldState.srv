@@ -1,0 +1,7 @@
+#request fields
+string field_name
+bool enable
+---
+#response fields
+bool result
+string result_string

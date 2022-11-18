@@ -74,6 +74,7 @@ public:
   {
     scan_pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>(
       SCAN_TOPIC, rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+    std::dynamic_pointer_cast<rclcpp_lifecycle::ManagedEntityInterface>(scan_pub_)->on_activate();
 
     std::unique_ptr<sensor_msgs::msg::LaserScan> msg =
       std::make_unique<sensor_msgs::msg::LaserScan>();
@@ -98,6 +99,7 @@ public:
   {
     pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
       POINTCLOUD_TOPIC, rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+    std::dynamic_pointer_cast<rclcpp_lifecycle::ManagedEntityInterface>(pointcloud_pub_)->on_activate();
 
     std::unique_ptr<sensor_msgs::msg::PointCloud2> msg =
       std::make_unique<sensor_msgs::msg::PointCloud2>();
@@ -140,6 +142,7 @@ public:
   {
     range_pub_ = this->create_publisher<sensor_msgs::msg::Range>(
       RANGE_TOPIC, rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+    std::dynamic_pointer_cast<rclcpp_lifecycle::ManagedEntityInterface>(range_pub_)->on_activate();
 
     std::unique_ptr<sensor_msgs::msg::Range> msg =
       std::make_unique<sensor_msgs::msg::Range>();

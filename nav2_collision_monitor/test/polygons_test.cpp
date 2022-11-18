@@ -361,6 +361,30 @@ TEST_F(Tester, testPolygonGetStopParameters)
   EXPECT_NEAR(poly[3].y, SQUARE_POLYGON[7], EPSILON);
 }
 
+TEST_F(Tester, testPolygonGetEmgStopParameters)
+{
+  createPolygon("emg_stop");
+
+  // Check that common parameters set correctly
+  EXPECT_EQ(polygon_->getName(), POLYGON_NAME);
+  EXPECT_EQ(polygon_->getActionType(), nav2_collision_monitor::EMG_STOP);
+  EXPECT_EQ(polygon_->getMaxPoints(), MAX_POINTS);
+  EXPECT_EQ(polygon_->isVisualize(), true);
+
+  // Check that polygon set correctly
+  std::vector<nav2_collision_monitor::Point> poly;
+  polygon_->getPolygon(poly);
+  ASSERT_EQ(poly.size(), 4u);
+  EXPECT_NEAR(poly[0].x, SQUARE_POLYGON[0], EPSILON);
+  EXPECT_NEAR(poly[0].y, SQUARE_POLYGON[1], EPSILON);
+  EXPECT_NEAR(poly[1].x, SQUARE_POLYGON[2], EPSILON);
+  EXPECT_NEAR(poly[1].y, SQUARE_POLYGON[3], EPSILON);
+  EXPECT_NEAR(poly[2].x, SQUARE_POLYGON[4], EPSILON);
+  EXPECT_NEAR(poly[2].y, SQUARE_POLYGON[5], EPSILON);
+  EXPECT_NEAR(poly[3].x, SQUARE_POLYGON[6], EPSILON);
+  EXPECT_NEAR(poly[3].y, SQUARE_POLYGON[7], EPSILON);
+}
+
 TEST_F(Tester, testPolygonGetSlowdownParameters)
 {
   createPolygon("slowdown");

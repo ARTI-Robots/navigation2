@@ -14,6 +14,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav2_common REQUIRED)
 find_package(nav2_util REQUIRED)
 find_package(nav2_costmap_2d REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
 ### Header ###
 
@@ -35,6 +36,7 @@ set(dependencies
   tf2_geometry_msgs
   nav2_util
   nav2_costmap_2d
+  rosidl_default_runtime
 )
 
 set(executable_name collision_monitor)
@@ -68,6 +70,18 @@ ament_target_dependencies(${executable_name}
 )
 
 rclcpp_components_register_nodes(${library_name} "nav2_collision_monitor::CollisionMonitor")
+
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+        "srv/ChangeFieldState.srv"
+        DEPENDENCIES std_msgs # packages that above messages depend on
+        )
+
+rosidl_target_interfaces(${executable_name}
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+rosidl_target_interfaces(${library_name}
+        ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 ### Install ###
 
