@@ -30,7 +30,8 @@ namespace nav2_collision_monitor
 CollisionMonitor::CollisionMonitor(const rclcpp::NodeOptions & options)
 : nav2_util::LifecycleNode("collision_monitor", "", options),
   process_active_(false), robot_action_prev_{DO_NOTHING, {-1.0, -1.0, -1.0}},
-  stop_stamp_{0, 0, get_clock()->get_clock_type()}, stop_pub_timeout_(1.0, 0.0)
+  stop_stamp_{0, 0, get_clock()->get_clock_type()}, last_time_processed_{0, 0, get_clock()->get_clock_type()},
+  stop_pub_timeout_(1.0, 0.0), minimal_process_interval_(rclcpp::Duration::from_seconds(0.5))
 {
 }
 
@@ -69,9 +70,6 @@ CollisionMonitor::on_configure(const rclcpp_lifecycle::State & /*state*/)
     cmd_vel_out_topic, 1);
   emg_stop_pub_ = this->create_publisher<std_msgs::msg::Bool>(
       emg_stop_topic, 1);
-  change_field_state_srv_ = this->create_service<nav2_collision_monitor::srv::ChangeFieldState>(
-      "change_field_state", std::bind(&CollisionMonitor::changeFieldStateCallback, this, std::placeholders::_1,
-                                      std::placeholders::_2, std::placeholders::_3));
 
   return nav2_util::CallbackReturn::SUCCESS;
 }
@@ -84,6 +82,14 @@ CollisionMonitor::on_activate(const rclcpp_lifecycle::State & /*state*/)
   // Activating lifecycle publisher
   cmd_vel_out_pub_->on_activate();
   emg_stop_pub_->on_activate();
+
+  // Create services and timers
+  change_field_state_srv_ = this->create_service<nav2_collision_monitor::srv::ChangeFieldState>(
+      "change_field_state", std::bind(&CollisionMonitor::changeFieldStateCallback, this, std::placeholders::_1,
+                                      std::placeholders::_2, std::placeholders::_3));
+
+  process_watchdog_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(100), std::bind(&CollisionMonitor::processWatchdogCallback, this));
 
   // Activating all polygons that should be enabled by default
   for (std::shared_ptr<Polygon> polygon : polygons_) {
@@ -125,6 +131,10 @@ CollisionMonitor::on_deactivate(const rclcpp_lifecycle::State & /*state*/)
   cmd_vel_out_pub_->on_deactivate();
   emg_stop_pub_->on_deactivate();
 
+  // Remove timers and services created in activate()
+  change_field_state_srv_.reset();
+  process_watchdog_timer_.reset();
+
   // Destroying bond connection
   destroyBond();
 
@@ -139,7 +149,6 @@ CollisionMonitor::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   cmd_vel_in_sub_.reset();
   cmd_vel_out_pub_.reset();
   emg_stop_pub_.reset();
-  change_field_state_srv_.reset();
 
 
   polygons_.clear();
@@ -184,15 +193,19 @@ void CollisionMonitor::changeFieldStateCallback(const std::shared_ptr<rmw_reques
       auto needs_to_be_enabled = !polygon->isEnabled() && request->enable;
       auto needs_to_be_disabled = polygon->isEnabled() && !request->enable;
       if (needs_to_be_enabled) {
-        polygon->activate();
         RCLCPP_INFO( get_logger(), "Activating field %s", polygon->getName().c_str());
+        polygon->activate();
       }
       else if (needs_to_be_disabled) {
-        polygon->deactivate();
         RCLCPP_INFO( get_logger(), "Deactivating field %s", polygon->getName().c_str());
+        polygon->deactivate();
       }
       response->result = true;
       response->result_string="OK";
+
+      // run process without publishing velocity to ensure emergency stop topic is updated with active fields
+      Velocity velocity = {0.0,0.0,0.0};
+      process(velocity, false);
       return;
     }
   }
@@ -269,6 +282,11 @@ bool CollisionMonitor::getParameters(
     node, "stop_pub_timeout", rclcpp::ParameterValue(1.0));
   stop_pub_timeout_ =
     rclcpp::Duration::from_seconds(get_parameter("stop_pub_timeout").as_double());
+
+  nav2_util::declare_parameter_if_not_declared(
+      node, "minimal_process_interval", rclcpp::ParameterValue(0.5));
+  minimal_process_interval_ =
+      rclcpp::Duration::from_seconds(get_parameter("minimal_process_interval").as_double());
 
   if (!configurePolygons(base_frame_id, transform_tolerance)) {
     return false;
@@ -389,7 +407,7 @@ bool CollisionMonitor::configureSources(
   return true;
 }
 
-void CollisionMonitor::process(const Velocity & cmd_vel_in)
+void CollisionMonitor::process(const Velocity & cmd_vel_in, bool publish_velocity)
 {
   // Current timestamp for all inner routines prolongation
   rclcpp::Time curr_time = this->now();
@@ -453,11 +471,14 @@ void CollisionMonitor::process(const Velocity & cmd_vel_in)
   emg_stop_pub_->publish(emg_stop_msg);
 
   // Publish requred robot velocity
-  publishVelocity(robot_action);
+  if (publish_velocity){
+    publishVelocity(robot_action);
+  }
 
   // Publish polygons for better visualization
   publishPolygons();
 
+  last_time_processed_ = get_clock()->now();
   robot_action_prev_ = robot_action;
 }
 
@@ -552,6 +573,15 @@ void CollisionMonitor::publishPolygons() const
 {
   for (std::shared_ptr<Polygon> polygon : polygons_) {
     polygon->publish();
+  }
+}
+
+void CollisionMonitor::processWatchdogCallback()
+{
+    if (this->now() - last_time_processed_ > minimal_process_interval_) {
+    // run process without publishing velocity to ensure emergency stop topic is updated with active fields
+    Velocity velocity = {0.0,0.0,0.0};
+    process(velocity, false);
   }
 }
 

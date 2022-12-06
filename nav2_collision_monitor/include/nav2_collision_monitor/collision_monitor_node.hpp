@@ -106,6 +106,10 @@ protected:
                                 std::shared_ptr<nav2_collision_monitor::srv::ChangeFieldState::Request> request,
                                 std::shared_ptr<nav2_collision_monitor::srv::ChangeFieldState::Response> response);
   /**
+   * @brief Callback for timer to ensure fields are processed at least with minimum rate
+   */
+  void processWatchdogCallback();
+  /**
    * @brief Publishes output cmd_vel. If robot was stopped more than stop_pub_timeout_ seconds,
    * quit to publish 0-velocity.
    * @param robot_action Robot action to publish
@@ -154,7 +158,7 @@ protected:
    * @brief Main processing routine
    * @param cmd_vel_in Input desired robot velocity
    */
-  void process(const Velocity & cmd_vel_in);
+  void process(const Velocity & cmd_vel_in, bool publish_velocity=true);
 
   /**
    * @brief Processes the polygon of STOP and SLOWDOWN action type
@@ -210,8 +214,11 @@ protected:
   /// @brief Data sources array
   std::vector<std::shared_ptr<Source>> sources_;
 
+  /// @brief Timer to ensure fields are processed at least with minimum rate
+  rclcpp::TimerBase::SharedPtr process_watchdog_timer_;
+
   // Input/output speed controls
-  /// @beirf Input cmd_vel subscriber
+  /// @brief Input cmd_vel subscriber
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_in_sub_;
   /// @brief Output cmd_vel publisher
   rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_out_pub_;
@@ -228,8 +235,12 @@ protected:
   Action robot_action_prev_;
   /// @brief Latest timestamp when robot has 0-velocity
   rclcpp::Time stop_stamp_;
+  /// @brief Last time fields have been processed
+  rclcpp::Time last_time_processed_;
   /// @brief Timeout after which 0-velocity ceases to be published
   rclcpp::Duration stop_pub_timeout_;
+  /// @brief Minimal interval fields should be processed
+  rclcpp::Duration minimal_process_interval_;
 };  // class CollisionMonitor
 
 }  // namespace nav2_collision_monitor
