@@ -214,7 +214,7 @@ double Polygon::getCollisionTime(
 
 void Polygon::publish() const
 {
-  if (!visualize_) {
+  if (!visualize_ or !enable_) {
     return;
   }
 
