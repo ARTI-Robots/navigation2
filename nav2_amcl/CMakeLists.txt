@@ -15,6 +15,12 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(nav2_util REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(pcl_ros REQUIRED)
+find_package(PCL REQUIRED)
+find_package(laser_geometry REQUIRED)
+
+pkg_check_modules(yaml-cpp REQUIRED yaml-cpp>=0.5)
 
 nav2_package()
 
@@ -60,6 +66,10 @@ set(dependencies
   tf2
   nav2_util
   nav2_msgs
+  pcl_conversions
+  pcl_ros
+  laser_geometry
+  yaml-cpp
 )
 
 ament_target_dependencies(${executable_name}

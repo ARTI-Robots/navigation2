@@ -242,11 +242,11 @@ void Tester::setCommonParameters()
 
 void Tester::activateTestPublishers()
 {
-  std::dynamic_pointer_cast<rclcpp_lifecycle::LifecyclePublisherInterface>(footprint_pub_)->on_activate();
-  std::dynamic_pointer_cast<rclcpp_lifecycle::LifecyclePublisherInterface>(scan_pub_)->on_activate();
-  std::dynamic_pointer_cast<rclcpp_lifecycle::LifecyclePublisherInterface>(pointcloud_pub_)->on_activate();
-  std::dynamic_pointer_cast<rclcpp_lifecycle::LifecyclePublisherInterface>(range_pub_)->on_activate();
-  std::dynamic_pointer_cast<rclcpp_lifecycle::LifecyclePublisherInterface>(cmd_vel_in_pub_)->on_activate();
+  std::dynamic_pointer_cast<rclcpp_lifecycle::SimpleManagedEntity>(footprint_pub_)->on_activate();
+  std::dynamic_pointer_cast<rclcpp_lifecycle::SimpleManagedEntity>(scan_pub_)->on_activate();
+  std::dynamic_pointer_cast<rclcpp_lifecycle::SimpleManagedEntity>(pointcloud_pub_)->on_activate();
+  std::dynamic_pointer_cast<rclcpp_lifecycle::SimpleManagedEntity>(range_pub_)->on_activate();
+  std::dynamic_pointer_cast<rclcpp_lifecycle::SimpleManagedEntity>(cmd_vel_in_pub_)->on_activate();
 }
 
 void Tester::addPolygon(

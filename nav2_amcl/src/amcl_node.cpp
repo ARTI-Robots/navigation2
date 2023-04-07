@@ -35,13 +35,21 @@
 #include "nav2_util/string_utils.hpp"
 #include "nav2_amcl/sensors/laser/laser.hpp"
 #include "tf2/convert.h"
-#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2/LinearMath/Transform.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/message_filter.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/create_timer_ros.h"
+#include <laser_geometry/laser_geometry.hpp>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/PointIndices.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <yaml-cpp/yaml.h>
+#include <iostream>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -234,6 +242,14 @@ AmclNode::AmclNode()
   add_parameter(
     "map_topic", rclcpp::ParameterValue("map"),
     "Topic to subscribe to in order to receive the map to localize on");
+
+  add_parameter(
+    "feature_matching_sigma", rclcpp::ParameterValue(0.1),
+    "Sigma used to calculate probability to match a feature");
+
+  add_parameter(
+    "feature_map_file", rclcpp::ParameterValue(""),
+    "File to load known features for matching");        
 }
 
 AmclNode::~AmclNode()
@@ -348,6 +364,9 @@ AmclNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   laser_scan_connection_.disconnect();
   laser_scan_filter_.reset();
   laser_scan_sub_.reset();
+  feature_connection_.disconnect();
+  feature_filter_.reset();
+  feature_sub_.reset();
 
   // Map
   if (map_ != NULL) {
@@ -382,6 +401,12 @@ AmclNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
   noise_only_update_ = false;
   recovery_run_count_ = 0;
   recovery_scan_count_ = 0;
+
+  // Feature matching
+  feature_matchers_.clear();
+  feature_matchers_update_.clear();
+  frame_to_feature_matcher_.clear();
+  feature_map_.clear();
 
   if (set_initial_pose_) {
     set_parameter(
@@ -792,6 +817,123 @@ AmclNode::laserReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan)
   }
 }
 
+void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan)
+{
+  std::lock_guard<std::recursive_mutex> cfl(mutex_);
+
+  // Since the sensor data is continually being published by the simulator or robot,
+  // we don't want our callbacks to fire until we're in the active state
+  if (!active_) {return;}
+
+  std::string laser_scan_frame_id = nav2_util::strip_leading_slash(laser_scan->header.frame_id);
+  last_laser_received_ts_ = now();
+  int laser_index = -1;
+  geometry_msgs::msg::PoseStamped laser_pose;
+
+  // Do we have the base->base_laser Tx yet?
+  if (frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end()) {
+    if (!addFeatureProcessor(laser_index, laser_scan, laser_scan_frame_id, laser_pose)) {
+      return;  // could not find transform
+    }
+  } else {
+    // we have the laser pose, retrieve laser index
+    laser_index = frame_to_feature_matcher_[laser_scan->header.frame_id];
+  }
+
+  // Where was the robot when this scan was taken?
+  pf_vector_t pose;
+  if (!getOdomPose(
+      latest_odom_pose_, pose.v[0], pose.v[1], pose.v[2],
+      laser_scan->header.stamp, base_frame_id_))
+  {
+    RCLCPP_ERROR(get_logger(), "Couldn't determine robot's pose associated with laser scan");
+    return;
+  }
+
+  pf_vector_t delta = pf_vector_zero();
+  bool force_publication = false;
+  if (!pf_init_) {
+    // Pose at last filter update
+    pf_odom_pose_ = pose;
+    pf_init_ = true;
+
+    for (unsigned int i = 0; i < feature_matchers_update_.size(); i++) {
+      feature_matchers_update_[i] = true;
+    }
+
+    force_publication = true;
+    resample_count_ = 0;
+  } else {
+    // Set the laser update flags
+    if (shouldUpdateFilter(pose, delta)) {
+      for (unsigned int i = 0; i < feature_matchers_update_.size(); i++) {
+        feature_matchers_update_[i] = true;
+      }
+    }
+    if (feature_matchers_update_[laser_index]) {
+      if (noise_only_update_) {
+        // instead of sampling from motion model we just add gaussian noise for no-motion update
+        // use update thresholds as base values for noise calculation
+        RCLCPP_INFO(get_logger(), "Performing Noise Only Update");
+        pf_vector_t artificial_delta = {d_thresh_, d_thresh_, a_thresh_};
+        recovery_motion_model_->noiseOnlyUpdate(pf_, pose, artificial_delta);
+        noise_only_update_ = false;
+      } else {
+        motion_model_->odometryUpdate(pf_, pose, delta);
+      }
+    }
+    force_update_ = false;
+  }
+
+  bool resampled = false;
+
+  // If the robot has moved, update the filter
+  if (feature_matchers_update_[laser_index]) {
+    updateFilterFeatures(laser_index, laser_scan, pose);
+
+    // Resample the particles
+    if (!(++resample_count_ % resample_interval_)) {
+      pf_update_resample(pf_);
+      resampled = true;
+    }
+
+    pf_sample_set_t * set = pf_->sets + pf_->current_set;
+    RCLCPP_DEBUG(get_logger(), "Num samples: %d\n", set->sample_count);
+
+    if (!force_update_) {
+      publishParticleCloud(set);
+    }
+  }
+  if (resampled || force_publication || !first_pose_sent_) {
+    amcl_hyp_t max_weight_hyps;
+    std::vector<amcl_hyp_t> hyps;
+    int max_weight_hyp = -1;
+    if (getMaxWeightHyp(hyps, max_weight_hyps, max_weight_hyp)) {
+      publishAmclPose(laser_scan, hyps, max_weight_hyp);
+      calculateMaptoOdomTransform(laser_scan, hyps, max_weight_hyp);
+
+      if (tf_broadcast_ == true) {
+        // We want to send a transform that is good up until a
+        // tolerance time so that odom can be used
+        auto stamp = tf2_ros::fromMsg(laser_scan->header.stamp);
+        tf2::TimePoint transform_expiration = stamp + transform_tolerance_;
+        sendMapToOdomTransform(transform_expiration);
+        sent_first_transform_ = true;
+      }
+    } else {
+      RCLCPP_ERROR(get_logger(), "No pose!");
+    }
+  } else if (latest_tf_valid_) {
+    if (tf_broadcast_ == true) {
+      // Nothing changed, so we'll just republish the last transform, to keep
+      // everybody happy.
+      tf2::TimePoint transform_expiration = tf2_ros::fromMsg(laser_scan->header.stamp) +
+        transform_tolerance_;
+      sendMapToOdomTransform(transform_expiration);
+    }
+  }
+}
+
 bool AmclNode::addNewScanner(
   int & laser_index,
   const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
@@ -824,6 +966,21 @@ bool AmclNode::addNewScanner(
   laser_pose_v.v[2] = 0;
   lasers_[laser_index]->SetLaserPose(laser_pose_v);
   frame_to_laser_[laser_scan->header.frame_id] = laser_index;
+  return true;
+}
+
+bool AmclNode::addFeatureProcessor(
+  int & laser_index,
+  const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+  const std::string & /*laser_scan_frame_id*/,
+  geometry_msgs::msg::PoseStamped & laser_pose)
+{
+  feature_matchers_.push_back(new FeatureModel(feature_map_, feature_matching_sigma_));
+  feature_matchers_update_.push_back(true);
+  laser_index = frame_to_feature_matcher_.size();
+  laser_pose = geometry_msgs::msg::PoseStamped();
+
+  frame_to_feature_matcher_[laser_scan->header.frame_id] = laser_index;
   return true;
 }
 
@@ -924,6 +1081,83 @@ bool AmclNode::updateFilter(
   }
   lasers_[laser_index]->sensorUpdate(pf_, reinterpret_cast<nav2_amcl::LaserData *>(&ldata));
   lasers_update_[laser_index] = false;
+  pf_odom_pose_ = pose;
+  return true;
+}
+
+bool AmclNode::updateFilterFeatures(
+    const int & laser_index,
+    const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+    const pf_vector_t & pose)
+{
+  RCLCPP_INFO_STREAM_ONCE(get_logger(), "convert laser scan to landmarks");
+
+  sensor_msgs::msg::PointCloud2 laser_cloud_msg;
+  laser_geometry::LaserProjection projection;
+  projection.transformLaserScanToPointCloud(base_frame_id_, *laser_scan, laser_cloud_msg, *tf_buffer_);
+  try
+  {
+    geometry_msgs::msg::TransformStamped tf_transformation = tf_buffer_->lookupTransform(base_frame_id_, 
+      laser_scan->header.frame_id,  tf2::TimePointZero);
+  }
+  catch (const tf2::TransformException& e)
+  {
+    RCLCPP_WARN_STREAM_ONCE(get_logger(), "tried to get transformation from '" << base_frame_id_ << "' to '" << laser_scan->header.frame_id << "'");
+    RCLCPP_WARN_STREAM_ONCE(get_logger(), "tf transformation error " << e.what());
+    RCLCPP_DEBUG_STREAM(get_logger(), "tf transformation error " << e.what());
+  }
+
+  pcl::PointCloud<pcl::PointXYZI>::Ptr laser_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+  pcl::fromROSMsg(laser_cloud_msg, *laser_cloud);
+  RCLCPP_DEBUG_STREAM(get_logger(), "transformed laser cloud size: " << laser_cloud->size());
+
+  if (laser_cloud->empty())
+  {
+    return true;
+  }
+
+  pcl::search::KdTree<pcl::PointXYZI>::Ptr kd_tree(new pcl::search::KdTree<pcl::PointXYZI>);
+  kd_tree->setInputCloud(laser_cloud);
+  std::vector<pcl::PointIndices> clusters;
+  pcl::extractEuclideanClusters<pcl::PointXYZI>(*laser_cloud, kd_tree, 0.1, clusters);
+
+  FeatureReadings feature_readings;
+
+  RCLCPP_DEBUG_STREAM(get_logger(), "clusters: " << clusters.size());
+  for (const pcl::PointIndices& cluster : clusters)
+  {
+    double accumulated_x = 0.;
+    double accumulated_y = 0.;
+    for (const int index : cluster.indices)
+    {
+      accumulated_x += laser_cloud->at(index).x;
+      accumulated_y += laser_cloud->at(index).y;
+    }
+
+    double center_x = accumulated_x / static_cast<double>(cluster.indices.size());
+    double center_y = accumulated_y / static_cast<double>(cluster.indices.size());
+    RCLCPP_DEBUG_STREAM(get_logger(), "center_x: " << center_x);
+    RCLCPP_DEBUG_STREAM(get_logger(), "center_y: " << center_y);
+
+    FeatureReading new_reading;
+
+    new_reading.range = std::hypot(center_x, center_y);
+    new_reading.bearing = std::atan2(center_y, center_x);
+    RCLCPP_DEBUG_STREAM(get_logger(), "range: " << new_reading.range);
+    RCLCPP_DEBUG_STREAM(get_logger(), "bearing: " << new_reading.bearing);
+
+    feature_readings.push_back(new_reading);
+  }
+
+  RCLCPP_DEBUG_STREAM(get_logger(), "landmark size: " << feature_readings.size());
+
+  if (feature_readings.empty())
+  {
+    return true;
+  }
+
+  feature_matchers_[laser_index]->sensorUpdate(pf_, &feature_readings);
+
   pf_odom_pose_ = pose;
   return true;
 }
@@ -1170,6 +1404,14 @@ AmclNode::initParameters()
   get_parameter("always_reset_initial_pose", always_reset_initial_pose_);
   get_parameter("scan_topic", scan_topic_);
   get_parameter("map_topic", map_topic_);
+  get_parameter("feature_matching_sigma", feature_matching_sigma_);
+
+  std::string feature_map_file;
+  get_parameter("feature_map_file", feature_map_file);
+  if (!feature_map_file.empty())
+  {
+    readFeatureMap(feature_map_file);
+  }
 
   save_pose_period_ = tf2::durationFromSec(1.0 / save_pose_rate);
   transform_tolerance_ = tf2::durationFromSec(tmp_tol);
@@ -1217,6 +1459,20 @@ AmclNode::initParameters()
 
   if (always_reset_initial_pose_) {
     initial_pose_is_known_ = false;
+  }
+}
+
+void AmclNode::readFeatureMap(const std::string& feature_map_file)
+{
+  std::ifstream feature_file_stream(feature_map_file);    
+  YAML::Node feature_yaml = YAML::Load(feature_file_stream);
+  feature_map_.reserve(feature_yaml.size());
+  for (size_t i = 0; i < feature_yaml.size(); ++i)
+  {
+    Point new_feature;
+    new_feature.x = feature_yaml[i]["x"].as<double>();
+    new_feature.y = feature_yaml[i]["y"].as<double>();
+    feature_map_.push_back(new_feature);
   }
 }
 
@@ -1347,6 +1603,17 @@ AmclNode::initMessageFilters()
     std::bind(
       &AmclNode::laserReceived,
       this, std::placeholders::_1));
+
+  feature_sub_ = std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(
+    rclcpp_node_.get(), scan_topic_, rmw_qos_profile_sensor_data);
+
+  feature_filter_ = std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
+    *feature_sub_, *tf_buffer_, odom_frame_id_, 10, rclcpp_node_, transform_tolerance_);
+
+  feature_connection_ = feature_filter_->registerCallback(
+    std::bind(
+      &AmclNode::featuresReceived,
+      this, std::placeholders::_1));      
 }
 
 void

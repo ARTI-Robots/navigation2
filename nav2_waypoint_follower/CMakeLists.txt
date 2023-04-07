@@ -15,6 +15,7 @@ find_package(nav2_common REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav2_util REQUIRED)
@@ -46,6 +47,7 @@ set(dependencies
   rclcpp
   rclcpp_action
   rclcpp_lifecycle
+  rclcpp_components
   nav_msgs
   nav2_msgs
   nav2_util

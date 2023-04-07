@@ -40,6 +40,8 @@
 #include "std_srvs/srv/empty.hpp"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
+#include <nav2_amcl/kdtree/point_set.h>
+#include <nav2_amcl/sensors/feature_matcher/feature_model.hpp>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -160,6 +162,9 @@ protected:
   std::unique_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>> laser_scan_sub_;
   std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> laser_scan_filter_;
   message_filters::Connection laser_scan_connection_;
+  std::unique_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>> feature_sub_;
+  std::unique_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>> feature_filter_;
+  message_filters::Connection feature_connection_;
 
   // Publishers and subscribers
   /*
@@ -180,6 +185,10 @@ protected:
    * @brief Handle when a laser scan is received
    */
   void laserReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan);
+  /*
+   * @brief Handle when a laser scan is received which represents a list of features
+   */
+  void featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan);
 
   // Services and service callbacks
   /*
@@ -284,6 +293,10 @@ protected:
   std::vector<bool> lasers_update_;
   std::map<std::string, int> frame_to_laser_;
   rclcpp::Time last_laser_received_ts_;
+
+  std::vector<nav2_amcl::FeatureModel *> feature_matchers_;
+  std::vector<bool> feature_matchers_update_;
+  std::map<std::string, int> frame_to_feature_matcher_;  
   /*
    * @brief Check if a laser has been received
    */
@@ -303,6 +316,15 @@ protected:
     const std::string & laser_scan_frame_id,
     geometry_msgs::msg::PoseStamped & laser_pose);
   /*
+   * @brief Add a new laser scanner if a new one is received in the laser scallbacks
+   */
+  bool addFeatureProcessor(
+    int & laser_index,
+    const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+    const std::string & laser_scan_frame_id,
+    geometry_msgs::msg::PoseStamped & laser_pose);  
+
+  /*
    * @brief Whether the pf needs to be updated
    */
   bool shouldUpdateFilter(const pf_vector_t pose, pf_vector_t & delta);
@@ -313,6 +335,14 @@ protected:
     const int & laser_index,
     const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
     const pf_vector_t & pose);
+
+  /*
+   * @brief Update the PF for features
+   */
+  bool updateFilterFeatures(
+    const int & laser_index,
+    const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+    const pf_vector_t & pose);    
   /*
    * @brief Publish particle cloud
    */
@@ -357,6 +387,9 @@ protected:
    * @brief Get ROS parameters for node
    */
   void initParameters();
+
+  void readFeatureMap(const std::string& feature_map_file);
+
   double alpha1_;
   double alpha2_;
   double alpha3_;
@@ -398,6 +431,9 @@ protected:
   double z_rand_;
   std::string scan_topic_{"scan"};
   std::string map_topic_{"map"};
+
+  Points feature_map_;
+  double feature_matching_sigma_;
 };
 
 }  // namespace nav2_amcl
