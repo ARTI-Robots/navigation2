@@ -758,6 +758,10 @@ AmclNode::laserReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan)
       for (unsigned int i = 0; i < lasers_update_.size(); i++) {
         lasers_update_[i] = true;
       }
+      //also update the with the feature matchers as we want all sensors to to the best to get an estimate
+      for (unsigned int i = 0; i < feature_matchers_update_.size(); i++) {
+        feature_matchers_update_[i] = true;
+      }        
     }
     if (lasers_update_[laser_index]) {
       if (noise_only_update_) {
@@ -915,6 +919,10 @@ void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr lase
       for (unsigned int i = 0; i < feature_matchers_update_.size(); i++) {
         feature_matchers_update_[i] = true;
       }
+      //also update the with the laser as we want all sensors to to the best to get an estimate
+      for (unsigned int i = 0; i < lasers_update_.size(); i++) {
+        lasers_update_[i] = true;
+      }      
     }
     if (feature_matchers_update_[laser_index]) {
       if (noise_only_update_) {
@@ -1143,6 +1151,7 @@ bool AmclNode::updateFilterFeatures(
   }
 
   feature_matchers_[laser_index]->sensorUpdate(pf_, &feature_readings);
+  feature_matchers_update_[laser_index] = false;
 
   pf_odom_pose_ = pose;
   return true;
