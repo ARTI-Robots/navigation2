@@ -866,11 +866,10 @@ void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr lase
   std::string laser_scan_frame_id = nav2_util::strip_leading_slash(laser_scan->header.frame_id);
   last_laser_received_ts_ = now();
   int laser_index = -1;
-  geometry_msgs::msg::PoseStamped laser_pose;
 
   // Do we have the base->base_laser Tx yet?
-  if (frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end()) {
-    if (!addFeatureProcessor(laser_index, laser_scan, laser_scan_frame_id, laser_pose)) {
+  if (frame_to_feature_matcher_.find(laser_scan_frame_id) == frame_to_feature_matcher_.end()) {
+    if (!addFeatureProcessor(laser_index, laser_scan, laser_scan_frame_id)) {
       return;  // could not find transform
     }
   } else {
@@ -1019,13 +1018,11 @@ bool AmclNode::addNewScanner(
 bool AmclNode::addFeatureProcessor(
   int & laser_index,
   const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
-  const std::string & /*laser_scan_frame_id*/,
-  geometry_msgs::msg::PoseStamped & laser_pose)
+  const std::string & /*laser_scan_frame_id*/)
 {
+  laser_index = feature_matchers_.size();
   feature_matchers_.push_back(new FeatureModel(feature_map_, feature_matching_sigma_));
   feature_matchers_update_.push_back(true);
-  laser_index = frame_to_feature_matcher_.size();
-  laser_pose = geometry_msgs::msg::PoseStamped();
 
   frame_to_feature_matcher_[laser_scan->header.frame_id] = laser_index;
   return true;
