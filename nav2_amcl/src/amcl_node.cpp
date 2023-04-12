@@ -240,6 +240,10 @@ AmclNode::AmclNode()
     "Topic to subscribe to in order to receive the laser scan for localization");
 
   add_parameter(
+    "feature_topic", rclcpp::ParameterValue("feature_topic"),
+    "Topic to subscribe to in order to receive the laser scan for feature matching");
+
+  add_parameter(
     "map_topic", rclcpp::ParameterValue("map"),
     "Topic to subscribe to in order to receive the map to localize on");
 
@@ -304,6 +308,8 @@ AmclNode::on_activate(const rclcpp_lifecycle::State & /*state*/)
   // Lifecycle publishers must be explicitly activated
   pose_pub_->on_activate();
   particle_cloud_pub_->on_activate();
+  feature_map_pub_->on_activate();
+  feature_map_published_ = false;
 
   first_pose_sent_ = false;
 
@@ -820,10 +826,42 @@ AmclNode::laserReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan)
 void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr laser_scan)
 {
   std::lock_guard<std::recursive_mutex> cfl(mutex_);
+  RCLCPP_DEBUG(get_logger(), "featuresReceived");
 
   // Since the sensor data is continually being published by the simulator or robot,
   // we don't want our callbacks to fire until we're in the active state
   if (!active_) {return;}
+
+  if (feature_map_.empty())
+  {
+    return;
+  }
+  RCLCPP_DEBUG(get_logger(), "Have feature map");    
+
+  if (!feature_map_published_)
+  {
+    RCLCPP_DEBUG(get_logger(), "Should send feature map");    
+  }
+
+  if (!feature_map_published_ && (feature_map_pub_->get_subscription_count() > 0))
+  {
+    RCLCPP_DEBUG(get_logger(), "Send feature map");
+    sensor_msgs::msg::PointCloud feature_map_msg;
+    for (const auto &point : feature_map_)
+    {
+      geometry_msgs::msg::Point32 point_msg;
+      point_msg.x = point.x;
+      point_msg.y = point.y;
+      feature_map_msg.points.push_back(point_msg);
+    }
+
+    feature_map_msg.header.frame_id = global_frame_id_;
+    feature_map_msg.header.stamp = get_clock()->now();
+
+    feature_map_pub_->publish(feature_map_msg);
+    feature_map_published_ = true;
+  }
+  
 
   std::string laser_scan_frame_id = nav2_util::strip_leading_slash(laser_scan->header.frame_id);
   last_laser_received_ts_ = now();
@@ -839,6 +877,13 @@ void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr lase
     // we have the laser pose, retrieve laser index
     laser_index = frame_to_feature_matcher_[laser_scan->header.frame_id];
   }
+  RCLCPP_DEBUG(get_logger(), "Have proper laser index"); 
+
+  FeatureReadings feature_readings = convertLaserScanToFeatureReadings(laser_scan);
+  if (feature_readings.empty())
+  {
+    return;
+  }   
 
   // Where was the robot when this scan was taken?
   pf_vector_t pose;
@@ -849,6 +894,8 @@ void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr lase
     RCLCPP_ERROR(get_logger(), "Couldn't determine robot's pose associated with laser scan");
     return;
   }
+
+  RCLCPP_DEBUG(get_logger(), "Got odometry pose");    
 
   pf_vector_t delta = pf_vector_zero();
   bool force_publication = false;
@@ -889,7 +936,7 @@ void AmclNode::featuresReceived(sensor_msgs::msg::LaserScan::ConstSharedPtr lase
 
   // If the robot has moved, update the filter
   if (feature_matchers_update_[laser_index]) {
-    updateFilterFeatures(laser_index, laser_scan, pose);
+    updateFilterFeatures(laser_index, feature_readings, pose);
 
     // Resample the particles
     if (!(++resample_count_ % resample_interval_)) {
@@ -1087,8 +1134,24 @@ bool AmclNode::updateFilter(
 
 bool AmclNode::updateFilterFeatures(
     const int & laser_index,
-    const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+    FeatureReadings feature_readings,
     const pf_vector_t & pose)
+{
+
+  RCLCPP_DEBUG_STREAM(get_logger(), "landmark size: " << feature_readings.size());
+
+  if (feature_readings.empty())
+  {
+    return true;
+  }
+
+  feature_matchers_[laser_index]->sensorUpdate(pf_, &feature_readings);
+
+  pf_odom_pose_ = pose;
+  return true;
+}
+
+FeatureReadings AmclNode::convertLaserScanToFeatureReadings(const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan)
 {
   RCLCPP_INFO_STREAM_ONCE(get_logger(), "convert laser scan to landmarks");
 
@@ -1113,7 +1176,7 @@ bool AmclNode::updateFilterFeatures(
 
   if (laser_cloud->empty())
   {
-    return true;
+    return FeatureReadings();
   }
 
   pcl::search::KdTree<pcl::PointXYZI>::Ptr kd_tree(new pcl::search::KdTree<pcl::PointXYZI>);
@@ -1149,17 +1212,7 @@ bool AmclNode::updateFilterFeatures(
     feature_readings.push_back(new_reading);
   }
 
-  RCLCPP_DEBUG_STREAM(get_logger(), "landmark size: " << feature_readings.size());
-
-  if (feature_readings.empty())
-  {
-    return true;
-  }
-
-  feature_matchers_[laser_index]->sensorUpdate(pf_, &feature_readings);
-
-  pf_odom_pose_ = pose;
-  return true;
+  return feature_readings;
 }
 
 void
@@ -1403,6 +1456,7 @@ AmclNode::initParameters()
   get_parameter("first_map_only", first_map_only_);
   get_parameter("always_reset_initial_pose", always_reset_initial_pose_);
   get_parameter("scan_topic", scan_topic_);
+  get_parameter("feature_topic", feature_topic_);
   get_parameter("map_topic", map_topic_);
   get_parameter("feature_matching_sigma", feature_matching_sigma_);
 
@@ -1464,6 +1518,7 @@ AmclNode::initParameters()
 
 void AmclNode::readFeatureMap(const std::string& feature_map_file)
 {
+  RCLCPP_INFO_STREAM(get_logger(), "read feature map from: '" << feature_map_file <<"'");  
   std::ifstream feature_file_stream(feature_map_file);    
   YAML::Node feature_yaml = YAML::Load(feature_file_stream);
   feature_map_.reserve(feature_yaml.size());
@@ -1474,6 +1529,7 @@ void AmclNode::readFeatureMap(const std::string& feature_map_file)
     new_feature.y = feature_yaml[i]["y"].as<double>();
     feature_map_.push_back(new_feature);
   }
+  RCLCPP_INFO_STREAM(get_logger(), "loaded : " << feature_map_.size() <<" points for the feature map");  
 }
 
 void
@@ -1605,7 +1661,7 @@ AmclNode::initMessageFilters()
       this, std::placeholders::_1));
 
   feature_sub_ = std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(
-    rclcpp_node_.get(), scan_topic_, rmw_qos_profile_sensor_data);
+    rclcpp_node_.get(), feature_topic_, rmw_qos_profile_sensor_data);
 
   feature_filter_ = std::make_unique<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>(
     *feature_sub_, *tf_buffer_, odom_frame_id_, 10, rclcpp_node_, transform_tolerance_);
@@ -1628,6 +1684,9 @@ AmclNode::initPubSub()
   pose_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "amcl_pose",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+
+  feature_map_pub_ = create_publisher<sensor_msgs::msg::PointCloud>(
+    "feature_map", rclcpp::SensorDataQoS());
 
   initial_pose_sub_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "initialpose", rclcpp::SystemDefaultsQoS(),

@@ -42,6 +42,7 @@
 #include "tf2_ros/transform_listener.h"
 #include <nav2_amcl/kdtree/point_set.h>
 #include <nav2_amcl/sensors/feature_matcher/feature_model.hpp>
+#include <sensor_msgs/msg/point_cloud.hpp>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -177,6 +178,8 @@ protected:
     pose_pub_;
   rclcpp_lifecycle::LifecyclePublisher<nav2_msgs::msg::ParticleCloud>::SharedPtr
     particle_cloud_pub_;
+  rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::PointCloud>::SharedPtr
+    feature_map_pub_;    
   /*
    * @brief Handle with an initial pose estimate is received
    */
@@ -341,8 +344,10 @@ protected:
    */
   bool updateFilterFeatures(
     const int & laser_index,
-    const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan,
+    FeatureReadings feature_readings,
     const pf_vector_t & pose);    
+
+  FeatureReadings convertLaserScanToFeatureReadings(const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan);
   /*
    * @brief Publish particle cloud
    */
@@ -431,9 +436,11 @@ protected:
   double z_rand_;
   std::string scan_topic_{"scan"};
   std::string map_topic_{"map"};
+  std::string feature_topic_{"features"};
 
   Points feature_map_;
   double feature_matching_sigma_;
+  bool feature_map_published_;
 };
 
 }  // namespace nav2_amcl
