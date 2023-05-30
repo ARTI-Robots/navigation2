@@ -43,6 +43,7 @@
 #include <nav2_amcl/kdtree/point_set.h>
 #include <nav2_amcl/sensors/feature_matcher/feature_model.hpp>
 #include <sensor_msgs/msg/point_cloud.hpp>
+#include <fstream>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -440,6 +441,8 @@ protected:
   Points feature_map_;
   double feature_matching_sigma_;
   bool feature_map_published_;
+
+  std::ofstream pose_csv_file_stream_;
 };
 
 }  // namespace nav2_amcl

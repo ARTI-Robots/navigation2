@@ -19,6 +19,7 @@ find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(PCL REQUIRED)
 find_package(laser_geometry REQUIRED)
+find_package(backward_ros REQUIRED)
 
 pkg_check_modules(yaml-cpp REQUIRED yaml-cpp>=0.5)
 
@@ -70,6 +71,7 @@ set(dependencies
   pcl_ros
   laser_geometry
   yaml-cpp
+  backward_ros
 )
 
 ament_target_dependencies(${executable_name}
@@ -101,6 +103,9 @@ install(TARGETS ${executable_name}
 install(DIRECTORY include/
   DESTINATION include/
 )
+
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME}/)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -253,7 +253,11 @@ AmclNode::AmclNode()
 
   add_parameter(
     "feature_map_file", rclcpp::ParameterValue(""),
-    "File to load known features for matching");        
+    "File to load known features for matching");    
+
+  add_parameter(
+    "pose_csv_file", rclcpp::ParameterValue(""),
+    "File used to store the positions generated");
 }
 
 AmclNode::~AmclNode()
@@ -431,6 +435,12 @@ AmclNode::on_cleanup(const rclcpp_lifecycle::State & /*state*/)
       rclcpp::Parameter(
         "initial_pose.yaw",
         rclcpp::ParameterValue(tf2::getYaw(last_published_pose_.pose.pose.orientation))));
+  }
+
+  if (pose_csv_file_stream_.is_open())
+  {
+    pose_csv_file_stream_.flush();
+    pose_csv_file_stream_.close();
   }
 
   return nav2_util::CallbackReturn::SUCCESS;
@@ -1160,10 +1170,21 @@ bool AmclNode::updateFilterFeatures(
 FeatureReadings AmclNode::convertLaserScanToFeatureReadings(const sensor_msgs::msg::LaserScan::ConstSharedPtr & laser_scan)
 {
   RCLCPP_INFO_STREAM_ONCE(get_logger(), "convert laser scan to landmarks");
+  RCLCPP_DEBUG_STREAM(get_logger(), "have: " << laser_scan->ranges.size() << " range measurments from laser");
+  size_t finite_values = 0;
+  for (const auto &range : laser_scan->ranges)
+  {
+    if (std::isfinite(range))
+    {
+      finite_values++;
+    }
+  }
+  RCLCPP_DEBUG_STREAM(get_logger(), "finite_values in feature reading: " << finite_values);
 
   sensor_msgs::msg::PointCloud2 laser_cloud_msg;
   laser_geometry::LaserProjection projection;
   projection.transformLaserScanToPointCloud(base_frame_id_, *laser_scan, laser_cloud_msg, *tf_buffer_);
+  RCLCPP_DEBUG_STREAM(get_logger(), "point cloud size: " << laser_cloud_msg.data.size());
   try
   {
     geometry_msgs::msg::TransformStamped tf_transformation = tf_buffer_->lookupTransform(base_frame_id_, 
@@ -1341,6 +1362,13 @@ AmclNode::publishAmclPose(
     hyps[max_weight_hyp].pf_pose_mean.v[0],
     hyps[max_weight_hyp].pf_pose_mean.v[1],
     hyps[max_weight_hyp].pf_pose_mean.v[2]);
+
+  if (pose_csv_file_stream_.is_open())
+  {
+    pose_csv_file_stream_ << hyps[max_weight_hyp].pf_pose_mean.v[0] << ", " 
+                          << hyps[max_weight_hyp].pf_pose_mean.v[1] << ", "
+                          << hyps[max_weight_hyp].pf_pose_mean.v[2] << std::endl;
+  }
 }
 
 void
@@ -1471,6 +1499,15 @@ AmclNode::initParameters()
   if (!feature_map_file.empty())
   {
     readFeatureMap(feature_map_file);
+  }
+
+  std::string pose_csv_file;
+  get_parameter("pose_csv_file", pose_csv_file);
+  if (!pose_csv_file.empty())
+  {
+    pose_csv_file_stream_ = std::ofstream(pose_csv_file);
+    pose_csv_file_stream_ << "x, y, yaw" << std::endl;
+    pose_csv_file_stream_.flush();
   }
 
   save_pose_period_ = tf2::durationFromSec(1.0 / save_pose_rate);
