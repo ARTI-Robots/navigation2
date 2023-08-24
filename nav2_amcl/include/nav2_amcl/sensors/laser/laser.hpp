@@ -57,6 +57,14 @@ public:
   virtual bool sensorUpdate(pf_t * pf, LaserData * data) = 0;
 
   /*
+   * @brief get total fitness score of sensor model
+   * @param pf Particle filter to use
+   * @param data Laser data to use
+   * @return total weight of all particles
+   */
+  virtual double getSensorModelScore(pf_t * pf, LaserData * data) = 0;
+
+  /*
    * @brief Set the laser pose from an update
    * @param laser_pose Pose of the laser
    */
@@ -127,6 +135,14 @@ public:
    */
   bool sensorUpdate(pf_t * pf, LaserData * data);
 
+  /*
+   * @brief get total fitness score of sensor model
+   * @param pf Particle filter to use
+   * @param data Laser data to use
+   * @return total weight of all particles
+   */
+  double getSensorModelScore(pf_t * pf, LaserData * data);
+
 private:
   static double sensorFunction(LaserData * data, pf_sample_set_t * set);
   double z_short_;
@@ -156,6 +172,14 @@ public:
    * @return if it was succesful
    */
   bool sensorUpdate(pf_t * pf, LaserData * data);
+
+  /*
+   * @brief get total fitness score of sensor model
+   * @param pf Particle filter to use
+   * @param data Laser data to use
+   * @return total weight of all particles
+   */
+  double getSensorModelScore(pf_t * pf, LaserData * data);
 
 private:
   /*
@@ -190,6 +214,14 @@ public:
    * @return if it was succesful
    */
   bool sensorUpdate(pf_t * pf, LaserData * data);
+
+  /*
+   * @brief get total fitness score of sensor model
+   * @param pf Particle filter to use
+   * @param data Laser data to use
+   * @return total weight of all particles
+   */
+  double getSensorModelScore(pf_t * pf, LaserData * data);
 
 private:
   /*

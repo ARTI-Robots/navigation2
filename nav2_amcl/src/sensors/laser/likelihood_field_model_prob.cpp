@@ -251,4 +251,22 @@ LikelihoodFieldModelProb::sensorUpdate(pf_t * pf, LaserData * data)
   return true;
 }
 
+double
+LikelihoodFieldModelProb::getSensorModelScore(pf_t * pf, LaserData * data)
+{
+  if (max_beams_ < 2) {
+    return false;
+  }
+
+  pf_sample_set_t * set;
+  double total_weight;
+
+  set = pf->sets + pf->current_set;
+
+  // Compute the sample weights
+  total_weight = (*sensorFunction)(data, set);
+
+  return total_weight;
+}
+
 }  // namespace nav2_amcl

@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BehaviorTreeLog.msg"
   "msg/Particle.msg"
   "msg/ParticleCloud.msg"
+  "msg/LocalizationMetrics.msg"
   "msg/NavigationResult.msg"
   "srv/GetCostmap.srv"
   "srv/IsPathValid.srv"
