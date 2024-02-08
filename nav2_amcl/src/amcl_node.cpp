@@ -103,7 +103,6 @@ AmclNode::AmclNode(const rclcpp::NodeOptions & options)
   add_parameter("beam_skip_error_threshold", rclcpp::ParameterValue(0.9));
   add_parameter("beam_skip_threshold", rclcpp::ParameterValue(0.3));
   add_parameter("do_beamskip", rclcpp::ParameterValue(false));
-  add_parameter("first_map_only", rclcpp::ParameterValue(true));
 
   add_parameter(
     "global_frame_id", rclcpp::ParameterValue(std::string("map")),
