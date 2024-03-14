@@ -930,7 +930,7 @@ TEST_F(Tester, testSourcesNotSet)
   activateTestPublishers();
   addPolygon("Stop", POLYGON, 1.0, "stop");
   addSource(SCAN_NAME, SCAN);
-  cm_->declare_parameter("polygons", rclcpp::ParameterValue({"Stop"}));
+  cm_->declare_parameter("polygons", rclcpp::ParameterValue("Stop"));
   cm_->set_parameter(rclcpp::Parameter("polygons", std::vector<std::string>{"Stop"}));
 
   // Check that Collision Monitor node can not be configured for this parameters set

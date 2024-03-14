@@ -470,7 +470,7 @@ void CollisionMonitor::process(const Velocity & cmd_vel_in, bool publish_velocit
   }
   emg_stop_pub_->publish(emg_stop_msg);
 
-  // Publish requred robot velocity
+  // Publish required robot velocity
   if (publish_velocity){
     publishVelocity(robot_action);
   }
