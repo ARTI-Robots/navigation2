@@ -38,10 +38,17 @@ add_executable(${executable_name}
   src/main.cpp
 )
 
+set(executable_name_localization_score localization_score)
+
+add_executable(${executable_name_localization_score}
+  src/localization_score_main.cpp
+)
+
 set(library_name ${executable_name}_core)
 
 add_library(${library_name} SHARED
   src/amcl_node.cpp
+  src/localization_score_node.cpp
 )
 
 target_include_directories(${library_name} PRIVATE src/include)
@@ -75,6 +82,14 @@ target_link_libraries(${executable_name}
   ${library_name}
 )
 
+ament_target_dependencies(${executable_name_localization_score}
+  ${dependencies}
+)
+
+target_link_libraries(${executable_name_localization_score}
+  ${library_name}
+)
+
 ament_target_dependencies(${library_name}
   ${dependencies}
 )
@@ -84,6 +99,7 @@ target_link_libraries(${library_name}
 )
 
 rclcpp_components_register_nodes(${library_name} "nav2_amcl::AmclNode")
+rclcpp_components_register_nodes(${library_name} "nav2_amcl::LocalizationScoreNode")
 
 install(TARGETS ${library_name}
   ARCHIVE DESTINATION lib
@@ -91,7 +107,7 @@ install(TARGETS ${library_name}
   RUNTIME DESTINATION bin
 )
 
-install(TARGETS ${executable_name}
+install(TARGETS ${executable_name} ${executable_name_localization_score}
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

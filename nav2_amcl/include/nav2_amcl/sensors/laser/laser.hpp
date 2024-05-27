@@ -70,6 +70,11 @@ public:
    */
   void SetLaserPose(pf_vector_t & laser_pose);
 
+  inline map_t * getMap()
+  {
+    return map_;
+  }
+
 protected:
   double z_hit_;
   double z_rand_;
