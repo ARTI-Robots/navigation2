@@ -22,6 +22,7 @@
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
+  std::srand(0);
   auto node = std::make_shared<nav2_amcl::AmclNode>();
   rclcpp::spin(node->get_node_base_interface());
   rclcpp::shutdown();
