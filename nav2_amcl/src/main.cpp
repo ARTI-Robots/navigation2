@@ -23,6 +23,11 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   std::srand(0);
+  unsigned short seed[3];
+  seed[0] = 0;
+  seed[1] = 0;
+  seed[2] = 0;
+  seed48(seed);
   auto node = std::make_shared<nav2_amcl::AmclNode>();
   rclcpp::spin(node->get_node_base_interface());
   rclcpp::shutdown();
