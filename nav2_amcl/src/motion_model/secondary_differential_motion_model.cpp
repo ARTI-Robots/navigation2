@@ -56,8 +56,14 @@ SecondaryDifferentialMotionModel::odometryUpdate(
                                        alpha2_ * delta_trans * delta_trans)));
 
     // Adjust particle pose updates to match the new axis interpretation
-    sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); // Sideways
-    sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); // Forward
+  if (sample->pose.v[0] < sample->pose.v[1]){
+    sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
+    sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
+    }
+  else {
+    sample->pose.v[0] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
+    sample->pose.v[1] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
+  }
     sample->pose.v[2] += delta_rot1_hat + delta_rot2_hat;
   }
 }
@@ -98,9 +104,16 @@ SecondaryDifferentialMotionModel::noiseOnlyUpdate(
     delta_rot2_hat = angleutils::normalize(
       pf_ran_gaussian(sqrt(alpha1_ * delta_rot2_noise * delta_rot2_noise +
                            alpha2_ * delta_trans * delta_trans)));
-
-    sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
-    sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
+    
+    if (sample->pose.v[0] < sample->pose.v[1]){
+      sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
+      sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
+    
+    }
+    else{
+      sample->pose.v[0] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
+      sample->pose.v[1] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
+    }
     sample->pose.v[2] += delta_rot1_hat + delta_rot2_hat;
   }
 }
