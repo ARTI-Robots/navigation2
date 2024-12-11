@@ -21,11 +21,18 @@ SecondaryDifferentialMotionModel::odometryUpdate(
   pf_sample_set_t *set = pf->sets + pf->current_set;
   pf_vector_t old_pose = pf_vector_sub(pose, delta);
 
+  //local_delta = rotation(old_pose) * delta
+
   double delta_rot1, delta_trans, delta_rot2;
   double delta_rot1_hat, delta_trans_hat, delta_rot2_hat;
   double delta_rot1_noise, delta_rot2_noise;
 
-  // In secondary mode, v[0] is sideways and v[1] is forward
+  pf_vector_t local_delta;
+  double cos_theta = cos(-pose.v[2]);  
+  double sin_theta = sin(-pose.v[2]);
+  local_delta.v[0] = cos_theta * delta.v[0] - sin_theta * delta.v[1];  
+  local_delta.v[1] = sin_theta * delta.v[0] + cos_theta * delta.v[1];
+
   if (sqrt(delta.v[1] * delta.v[1] + delta.v[0] * delta.v[0]) < 0.01) {
     delta_rot1 = 0.0;
   } else {
@@ -56,15 +63,15 @@ SecondaryDifferentialMotionModel::odometryUpdate(
                                        alpha2_ * delta_trans * delta_trans)));
 
     // Adjust particle pose updates to match the new axis interpretation
-  if (sample->pose.v[0] < sample->pose.v[1]){
-    sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
-    sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
+    if ((std::abs(local_delta.v[0]) > std::abs(local_delta.v[1])) || (std::abs(local_delta.v[0]) < 1e-3 && std::abs(local_delta.v[1]) < 1e-3)) {  
+      sample->pose.v[0] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
+      sample->pose.v[1] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
     }
-  else {
-    sample->pose.v[0] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
-    sample->pose.v[1] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
-  }
-    sample->pose.v[2] += delta_rot1_hat + delta_rot2_hat;
+    else {
+      sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat); 
+      sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat); 
+    }
+      sample->pose.v[2] += delta_rot1_hat + delta_rot2_hat;
   }
 }
 
@@ -78,6 +85,12 @@ SecondaryDifferentialMotionModel::noiseOnlyUpdate(
   double delta_rot1, delta_trans, delta_rot2;
   double delta_rot1_hat, delta_trans_hat, delta_rot2_hat;
   double delta_rot1_noise, delta_rot2_noise;
+
+  pf_vector_t local_delta;
+  double cos_theta = cos(-pose.v[2]);  
+  double sin_theta = sin(-pose.v[2]);
+  local_delta.v[0] = cos_theta * delta.v[0] - sin_theta * delta.v[1];  
+  local_delta.v[1] = sin_theta * delta.v[0] + cos_theta * delta.v[1];
 
   if (sqrt(delta.v[1] * delta.v[1] + delta.v[0] * delta.v[0]) < 0.01) {
     delta_rot1 = 0.0;
@@ -105,14 +118,13 @@ SecondaryDifferentialMotionModel::noiseOnlyUpdate(
       pf_ran_gaussian(sqrt(alpha1_ * delta_rot2_noise * delta_rot2_noise +
                            alpha2_ * delta_trans * delta_trans)));
     
-    if (sample->pose.v[0] < sample->pose.v[1]){
-      sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
-      sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
-    
-    }
-    else{
+    if ((std::abs(local_delta.v[0]) > std::abs(local_delta.v[1])) || (std::abs(local_delta.v[0]) < 1e-3 && std::abs(local_delta.v[1]) < 1e-3)){  
       sample->pose.v[0] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
       sample->pose.v[1] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
+    }
+    else{
+      sample->pose.v[0] += delta_trans_hat * sin(sample->pose.v[2] + delta_rot1_hat);
+      sample->pose.v[1] += delta_trans_hat * cos(sample->pose.v[2] + delta_rot1_hat);
     }
     sample->pose.v[2] += delta_rot1_hat + delta_rot2_hat;
   }
